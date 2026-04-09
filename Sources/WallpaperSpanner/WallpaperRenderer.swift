@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class WallpaperRenderer {
+    private let fileManager = FileManager.default
+    private let retainSessionCount = 8
+
     func applyWallpaper(
         media: MediaAsset,
         displays: [DisplayInfo],
@@ -45,6 +48,12 @@ final class WallpaperRenderer {
 
             try NSWorkspace.shared.setDesktopImageURL(fileURL, for: screen, options: options)
         }
+
+        try? cleanupOldRenderDirectories(parentDirectory: outputDirectory.deletingLastPathComponent())
+    }
+
+    func debugRenderSessionName() -> String {
+        makeRenderSessionName()
     }
 
     private func renderSlice(
@@ -95,16 +104,50 @@ final class WallpaperRenderer {
             appropriateFor: nil,
             create: true
         )
-        let directory = baseDirectory
+        let parentDirectory = baseDirectory
             .appendingPathComponent("WallpaperSpanner", isDirectory: true)
             .appendingPathComponent("RenderedWallpapers", isDirectory: true)
+        let directory = parentDirectory
+            .appendingPathComponent(makeRenderSessionName(), isDirectory: true)
 
-        try FileManager.default.createDirectory(
+        try fileManager.createDirectory(
             at: directory,
             withIntermediateDirectories: true
         )
 
         return directory
+    }
+
+    private func makeRenderSessionName() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let timestamp = formatter.string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+
+        return "render-\(timestamp)-\(UUID().uuidString.lowercased())"
+    }
+
+    private func cleanupOldRenderDirectories(parentDirectory: URL) throws {
+        let urls = try fileManager.contentsOfDirectory(
+            at: parentDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey, .creationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        let directories = try urls.filter { url in
+            let values = try url.resourceValues(forKeys: [.isDirectoryKey])
+            return values.isDirectory == true
+        }
+
+        let sorted = try directories.sorted { lhs, rhs in
+            let lhsDate = try lhs.resourceValues(forKeys: [.creationDateKey]).creationDate ?? .distantPast
+            let rhsDate = try rhs.resourceValues(forKeys: [.creationDateKey]).creationDate ?? .distantPast
+            return lhsDate > rhsDate
+        }
+
+        for url in sorted.dropFirst(retainSessionCount) {
+            try? fileManager.removeItem(at: url)
+        }
     }
 
     private func writePNG(_ image: CGImage, to url: URL) throws {

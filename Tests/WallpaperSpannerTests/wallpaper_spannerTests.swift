@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import WallpaperSpanner
 
@@ -59,4 +60,17 @@ func previewConversionMapsBottomLeftCoordinatesIntoCanvasSpace() {
     #expect(converted.width == 216)
     #expect(converted.minY == 100)
     #expect(converted.height == 240)
+}
+
+@MainActor
+@Test
+func renderSessionNamesAreUniqueAndNamespaced() {
+    let renderer = WallpaperRenderer()
+
+    let first = renderer.debugRenderSessionName()
+    let second = renderer.debugRenderSessionName()
+
+    #expect(first.hasPrefix("render-"))
+    #expect(second.hasPrefix("render-"))
+    #expect(first != second)
 }
