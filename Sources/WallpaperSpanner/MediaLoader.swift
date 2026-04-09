@@ -4,16 +4,16 @@ import Foundation
 import ImageIO
 
 enum MediaLoader {
-    static func load(from url: URL) throws -> MediaAsset {
+    static func load(from url: URL, displayName: String? = nil) throws -> MediaAsset {
         switch try MediaKind.detect(url: url) {
         case .image:
-            try loadImage(from: url)
+            try loadImage(from: url, displayName: displayName)
         case .video:
-            try loadVideo(from: url)
+            try loadVideo(from: url, displayName: displayName)
         }
     }
 
-    private static func loadImage(from url: URL) throws -> MediaAsset {
+    private static func loadImage(from url: URL, displayName: String?) throws -> MediaAsset {
         guard
             let source = CGImageSourceCreateWithURL(url as CFURL, nil),
             let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
@@ -28,6 +28,7 @@ enum MediaLoader {
 
         return MediaAsset(
             url: url,
+            displayName: displayName,
             kind: .image,
             previewImage: previewImage,
             sourceImage: cgImage,
@@ -35,7 +36,7 @@ enum MediaLoader {
         )
     }
 
-    private static func loadVideo(from url: URL) throws -> MediaAsset {
+    private static func loadVideo(from url: URL, displayName: String?) throws -> MediaAsset {
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
@@ -66,6 +67,7 @@ enum MediaLoader {
 
         return MediaAsset(
             url: url,
+            displayName: displayName,
             kind: .video,
             previewImage: previewImage,
             sourceImage: nil,

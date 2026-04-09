@@ -7,6 +7,9 @@ import UniformTypeIdentifiers
 final class AppModel: ObservableObject {
     @Published var displays: [DisplayInfo] = []
     @Published var media: MediaAsset?
+    @Published var systemWallpaperItems: [SystemWallpaperItem] = []
+    @Published var isLoadingSystemWallpapers = false
+    @Published var systemWallpaperErrorMessage: String?
     @Published var contentMode: ContentMode = .fill {
         didSet { updateLiveWallpaperIfNeeded() }
     }
@@ -100,6 +103,43 @@ final class AppModel: ObservableObject {
             }
 
             statusMessage = "Loaded \(url.lastPathComponent)."
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    func loadSystemWallpapersIfNeeded() {
+        guard systemWallpaperItems.isEmpty, !isLoadingSystemWallpapers else {
+            return
+        }
+
+        refreshSystemWallpapers()
+    }
+
+    func refreshSystemWallpapers() {
+        isLoadingSystemWallpapers = true
+        systemWallpaperErrorMessage = nil
+
+        do {
+            systemWallpaperItems = try SystemWallpaperLibrary.loadCatalog()
+            statusMessage = "Loaded \(systemWallpaperItems.count) macOS wallpaper option(s)."
+        } catch {
+            systemWallpaperErrorMessage = error.localizedDescription
+            statusMessage = error.localizedDescription
+        }
+
+        isLoadingSystemWallpapers = false
+    }
+
+    func importSystemWallpaper(_ item: SystemWallpaperItem) {
+        do {
+            media = try MediaLoader.load(from: item.sourceURL, displayName: item.name)
+
+            if media?.kind == .image, liveWallpaperRunning {
+                stopLiveWallpaper()
+            }
+
+            statusMessage = item.importStatusMessage
         } catch {
             statusMessage = error.localizedDescription
         }

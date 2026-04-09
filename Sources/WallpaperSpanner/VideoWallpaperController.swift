@@ -110,7 +110,7 @@ final class VideoWallpaperController {
 
 @MainActor
 private final class DesktopVideoWindow: NSWindow {
-    let displayID: CGDirectDisplayID
+    private(set) var displayID: CGDirectDisplayID = 0
     private let sliceView = VideoSliceView(frame: .zero)
 
     init(
@@ -119,21 +119,20 @@ private final class DesktopVideoWindow: NSWindow {
         player: AVPlayer,
         contentRect: CGRect
     ) {
-        self.displayID = display.id
-
         super.init(
             contentRect: display.frame,
             styleMask: .borderless,
             backing: .buffered,
-            defer: false,
-            screen: screen
+            defer: false
         )
+        self.displayID = display.id
 
         backgroundColor = .black
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         hasShadow = false
         ignoresMouseEvents = true
         isOpaque = true
+        isReleasedWhenClosed = false
         level = .init(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
 
         sliceView.autoresizingMask = [.width, .height]
@@ -141,6 +140,20 @@ private final class DesktopVideoWindow: NSWindow {
 
         update(screen: screen, display: display, player: player, contentRect: contentRect)
         orderFront(nil)
+    }
+
+    override init(
+        contentRect: NSRect,
+        styleMask style: NSWindow.StyleMask,
+        backing bufferingType: NSWindow.BackingStoreType,
+        defer flag: Bool
+    ) {
+        super.init(
+            contentRect: contentRect,
+            styleMask: style,
+            backing: bufferingType,
+            defer: flag
+        )
     }
 
     func update(

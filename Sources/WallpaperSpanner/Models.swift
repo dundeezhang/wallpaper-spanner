@@ -46,13 +46,14 @@ struct LayoutSettings {
 
 struct MediaAsset {
     let url: URL
+    let displayName: String?
     let kind: MediaKind
     let previewImage: NSImage
     let sourceImage: CGImage?
     let contentSize: CGSize
 
     var fileName: String {
-        url.lastPathComponent
+        displayName ?? url.lastPathComponent
     }
 }
 

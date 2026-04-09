@@ -74,3 +74,53 @@ func renderSessionNamesAreUniqueAndNamespaced() {
     #expect(second.hasPrefix("render-"))
     #expect(first != second)
 }
+
+@Test
+func wrapperResolutionPrefersRealAssetOverPreview() throws {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let previewURL = root.appendingPathComponent("preview.heic")
+    let realURL = root.appendingPathComponent("Chroma Blue.heic")
+
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    FileManager.default.createFile(atPath: previewURL.path, contents: Data())
+    FileManager.default.createFile(atPath: realURL.path, contents: Data())
+
+    defer {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    let resolution = SystemWallpaperLibrary.resolveImportTarget(
+        wrapperName: "Chroma Blue",
+        mobileAssetID: "Chroma Blue",
+        rootDirectory: root,
+        previewURL: previewURL
+    )
+
+    #expect(resolution.sourceURL == realURL)
+    #expect(resolution.quality == .originalAsset)
+}
+
+@Test
+func wrapperResolutionFallsBackToPreviewAsset() throws {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let previewURL = root.appendingPathComponent("preview.heic")
+
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    FileManager.default.createFile(atPath: previewURL.path, contents: Data())
+
+    defer {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    let resolution = SystemWallpaperLibrary.resolveImportTarget(
+        wrapperName: "Missing Wallpaper",
+        mobileAssetID: nil,
+        rootDirectory: root,
+        previewURL: previewURL
+    )
+
+    #expect(resolution.sourceURL == previewURL)
+    #expect(resolution.quality == .previewFallback)
+}

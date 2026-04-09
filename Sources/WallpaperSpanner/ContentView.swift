@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var showingSystemWallpaperBrowser = false
 
     var body: some View {
         HSplitView {
@@ -29,10 +30,18 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     controlCard("Media") {
                         VStack(alignment: .leading, spacing: 12) {
-                            Button("Choose Image or Video") {
-                                model.chooseMedia()
+                            HStack {
+                                Button("Choose Image or Video") {
+                                    model.chooseMedia()
+                                }
+                                .buttonStyle(.borderedProminent)
+
+                                Button("Browse macOS Wallpapers") {
+                                    model.loadSystemWallpapersIfNeeded()
+                                    showingSystemWallpaperBrowser = true
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.borderedProminent)
 
                             if let media = model.media {
                                 LabeledValueRow(label: "File", value: media.fileName)
@@ -120,6 +129,15 @@ struct ContentView: View {
                 .frame(width: 360, alignment: .leading)
             }
             .background(Color(nsColor: .windowBackgroundColor))
+        }
+        .sheet(isPresented: $showingSystemWallpaperBrowser) {
+            SystemWallpaperBrowserView(
+                items: model.systemWallpaperItems,
+                isLoading: model.isLoadingSystemWallpapers,
+                errorMessage: model.systemWallpaperErrorMessage,
+                refresh: model.refreshSystemWallpapers,
+                choose: model.importSystemWallpaper
+            )
         }
     }
 
