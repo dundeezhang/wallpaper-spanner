@@ -7,9 +7,6 @@ import UniformTypeIdentifiers
 final class AppModel: ObservableObject {
     @Published var displays: [DisplayInfo] = []
     @Published var media: MediaAsset?
-    @Published var systemWallpaperItems: [SystemWallpaperItem] = []
-    @Published var isLoadingSystemWallpapers = false
-    @Published var systemWallpaperErrorMessage: String?
     @Published var contentMode: ContentMode = .fill {
         didSet { updateLiveWallpaperIfNeeded() }
     }
@@ -95,54 +92,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        do {
-            media = try MediaLoader.load(from: url)
-
-            if media?.kind == .image, liveWallpaperRunning {
-                stopLiveWallpaper()
-            }
-
-            statusMessage = "Loaded \(url.lastPathComponent)."
-        } catch {
-            statusMessage = error.localizedDescription
-        }
-    }
-
-    func loadSystemWallpapersIfNeeded() {
-        guard systemWallpaperItems.isEmpty, !isLoadingSystemWallpapers else {
-            return
-        }
-
-        refreshSystemWallpapers()
-    }
-
-    func refreshSystemWallpapers() {
-        isLoadingSystemWallpapers = true
-        systemWallpaperErrorMessage = nil
-
-        do {
-            systemWallpaperItems = try SystemWallpaperLibrary.loadCatalog()
-            statusMessage = "Loaded \(systemWallpaperItems.count) macOS wallpaper option(s)."
-        } catch {
-            systemWallpaperErrorMessage = error.localizedDescription
-            statusMessage = error.localizedDescription
-        }
-
-        isLoadingSystemWallpapers = false
-    }
-
-    func importSystemWallpaper(_ item: SystemWallpaperItem) {
-        do {
-            media = try MediaLoader.load(from: item.sourceURL, displayName: item.name)
-
-            if media?.kind == .image, liveWallpaperRunning {
-                stopLiveWallpaper()
-            }
-
-            statusMessage = item.importStatusMessage
-        } catch {
-            statusMessage = error.localizedDescription
-        }
+        loadMedia(from: url, loadedMessage: "Loaded \(url.lastPathComponent).")
     }
 
     func applyImageWallpaper() {
@@ -174,7 +124,6 @@ final class AppModel: ObservableObject {
             url: media.url,
             contentSize: media.contentSize,
             displays: displays,
-            screensByID: screensByID,
             settings: settings
         )
         liveWallpaperRunning = videoController.isRunning
@@ -184,9 +133,7 @@ final class AppModel: ObservableObject {
     }
 
     func stopLiveWallpaper() {
-        videoController.stop()
-        liveWallpaperRunning = false
-        statusMessage = "Stopped the live video wallpaper."
+        stopLiveWallpaper(updateStatusMessage: true)
     }
 
     private func updateLiveWallpaperIfNeeded() {
@@ -197,8 +144,36 @@ final class AppModel: ObservableObject {
         videoController.reconfigure(
             contentSize: media.contentSize,
             displays: displays,
-            screensByID: screensByID,
             settings: settings
         )
+        liveWallpaperRunning = videoController.isRunning
+    }
+
+    private func loadMedia(from url: URL, displayName: String? = nil, loadedMessage: String) {
+        do {
+            let loadedMedia = try MediaLoader.load(from: url, displayName: displayName)
+            applyLoadedMedia(loadedMedia, loadedMessage: loadedMessage)
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    private func applyLoadedMedia(_ loadedMedia: MediaAsset, loadedMessage: String) {
+        media = loadedMedia
+
+        if loadedMedia.kind == .image, liveWallpaperRunning {
+            stopLiveWallpaper(updateStatusMessage: false)
+        }
+
+        statusMessage = loadedMessage
+    }
+
+    private func stopLiveWallpaper(updateStatusMessage: Bool) {
+        videoController.stop()
+        liveWallpaperRunning = false
+
+        if updateStatusMessage {
+            statusMessage = "Stopped the live video wallpaper."
+        }
     }
 }

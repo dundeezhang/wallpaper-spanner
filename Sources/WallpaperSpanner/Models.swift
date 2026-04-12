@@ -3,7 +3,7 @@ import CoreGraphics
 import Foundation
 import UniformTypeIdentifiers
 
-enum MediaKind: String {
+enum MediaKind: String, Sendable {
     case image
     case video
 
@@ -28,7 +28,7 @@ enum MediaKind: String {
     }
 }
 
-enum ContentMode: String, CaseIterable, Identifiable {
+enum ContentMode: String, CaseIterable, Identifiable, Sendable {
     case fill = "Fill"
     case fit = "Fit"
 
@@ -37,7 +37,7 @@ enum ContentMode: String, CaseIterable, Identifiable {
     }
 }
 
-struct LayoutSettings {
+struct LayoutSettings: Sendable {
     var contentMode: ContentMode = .fill
     var zoom: Double = 1.0
     var horizontalOffset: Double = 0.0
@@ -57,7 +57,7 @@ struct MediaAsset {
     }
 }
 
-struct DisplayInfo: Identifiable {
+struct DisplayInfo: Identifiable, Sendable {
     let id: CGDirectDisplayID
     let name: String
     let frame: CGRect
@@ -150,6 +150,12 @@ enum WallpaperError: LocalizedError {
 }
 
 struct DisplayLayoutEngine {
+    private struct ContentMetrics {
+        let scaledSize: CGSize
+        let horizontalTravel: CGFloat
+        let verticalTravel: CGFloat
+    }
+
     static func bounds(for displays: [DisplayInfo]) -> CGRect {
         displays.reduce(into: CGRect.null) { partial, display in
             partial = partial.union(display.frame)
@@ -162,39 +168,23 @@ struct DisplayLayoutEngine {
         settings: LayoutSettings
     ) -> CGRect {
         guard
-            contentSize.width > 0,
-            contentSize.height > 0,
-            !canvas.isNull,
-            canvas.width > 0,
-            canvas.height > 0
+            let metrics = contentMetrics(
+                contentSize: contentSize,
+                in: canvas,
+                settings: settings
+            )
         else {
             return .zero
         }
 
-        let widthScale = canvas.width / contentSize.width
-        let heightScale = canvas.height / contentSize.height
-        let baseScale: CGFloat = switch settings.contentMode {
-        case .fill:
-            max(widthScale, heightScale)
-        case .fit:
-            min(widthScale, heightScale)
-        }
-
-        let scale = max(baseScale * CGFloat(settings.zoom), 0.01)
-        let scaledSize = CGSize(
-            width: contentSize.width * scale,
-            height: contentSize.height * scale
-        )
-        let horizontalTravel = max(abs(scaledSize.width - canvas.width) / 2, canvas.width * 0.45)
-        let verticalTravel = max(abs(scaledSize.height - canvas.height) / 2, canvas.height * 0.45)
-        let xOffset = CGFloat(settings.horizontalOffset) * horizontalTravel
-        let yOffset = CGFloat(settings.verticalOffset) * verticalTravel
+        let xOffset = CGFloat(settings.horizontalOffset) * metrics.horizontalTravel
+        let yOffset = CGFloat(settings.verticalOffset) * metrics.verticalTravel
 
         return CGRect(
-            x: canvas.midX - (scaledSize.width / 2) + xOffset,
-            y: canvas.midY - (scaledSize.height / 2) + yOffset,
-            width: scaledSize.width,
-            height: scaledSize.height
+            x: canvas.midX - (metrics.scaledSize.width / 2) + xOffset,
+            y: canvas.midY - (metrics.scaledSize.height / 2) + yOffset,
+            width: metrics.scaledSize.width,
+            height: metrics.scaledSize.height
         )
     }
 
@@ -235,6 +225,85 @@ struct DisplayLayoutEngine {
             y: previewRect.maxY - yFromBottom - height,
             width: rect.width * scale,
             height: height
+        )
+    }
+
+    static func normalizedOffsetDelta(
+        forPreviewTranslation translation: CGSize,
+        previewRect: CGRect,
+        layoutBounds: CGRect,
+        contentSize: CGSize,
+        settings: LayoutSettings
+    ) -> (horizontal: Double, vertical: Double) {
+        guard
+            layoutBounds.width > 0,
+            layoutBounds.height > 0,
+            previewRect.width > 0,
+            previewRect.height > 0,
+            let metrics = contentMetrics(
+                contentSize: contentSize,
+                in: layoutBounds,
+                settings: settings
+            )
+        else {
+            return (0, 0)
+        }
+
+        let previewScale = min(previewRect.width / layoutBounds.width, previewRect.height / layoutBounds.height)
+        guard previewScale > 0 else {
+            return (0, 0)
+        }
+
+        let layoutTranslationX = translation.width / previewScale
+        let layoutTranslationY = -translation.height / previewScale
+
+        return (
+            horizontal: metrics.horizontalTravel > 0 ? Double(layoutTranslationX / metrics.horizontalTravel) : 0,
+            vertical: metrics.verticalTravel > 0 ? Double(layoutTranslationY / metrics.verticalTravel) : 0
+        )
+    }
+
+    static func clampedOffsets(horizontal: Double, vertical: Double) -> (horizontal: Double, vertical: Double) {
+        (
+            horizontal: min(max(horizontal, -1), 1),
+            vertical: min(max(vertical, -1), 1)
+        )
+    }
+
+    private static func contentMetrics(
+        contentSize: CGSize,
+        in canvas: CGRect,
+        settings: LayoutSettings
+    ) -> ContentMetrics? {
+        guard
+            contentSize.width > 0,
+            contentSize.height > 0,
+            !canvas.isNull,
+            canvas.width > 0,
+            canvas.height > 0
+        else {
+            return nil
+        }
+
+        let widthScale = canvas.width / contentSize.width
+        let heightScale = canvas.height / contentSize.height
+        let baseScale: CGFloat = switch settings.contentMode {
+        case .fill:
+            max(widthScale, heightScale)
+        case .fit:
+            min(widthScale, heightScale)
+        }
+
+        let scale = max(baseScale * CGFloat(settings.zoom), 0.01)
+        let scaledSize = CGSize(
+            width: contentSize.width * scale,
+            height: contentSize.height * scale
+        )
+
+        return ContentMetrics(
+            scaledSize: scaledSize,
+            horizontalTravel: max(abs(scaledSize.width - canvas.width) / 2, canvas.width * 0.45),
+            verticalTravel: max(abs(scaledSize.height - canvas.height) / 2, canvas.height * 0.45)
         )
     }
 }

@@ -76,51 +76,46 @@ func renderSessionNamesAreUniqueAndNamespaced() {
 }
 
 @Test
-func wrapperResolutionPrefersRealAssetOverPreview() throws {
-    let root = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let previewURL = root.appendingPathComponent("preview.heic")
-    let realURL = root.appendingPathComponent("Chroma Blue.heic")
-
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    FileManager.default.createFile(atPath: previewURL.path, contents: Data())
-    FileManager.default.createFile(atPath: realURL.path, contents: Data())
-
-    defer {
-        try? FileManager.default.removeItem(at: root)
-    }
-
-    let resolution = SystemWallpaperLibrary.resolveImportTarget(
-        wrapperName: "Chroma Blue",
-        mobileAssetID: "Chroma Blue",
-        rootDirectory: root,
-        previewURL: previewURL
+func previewDragConvertsCanvasMovementIntoNormalizedOffsets() {
+    let delta = DisplayLayoutEngine.normalizedOffsetDelta(
+        forPreviewTranslation: CGSize(width: 57.6, height: -10.8),
+        previewRect: CGRect(x: 0, y: 0, width: 576, height: 108),
+        layoutBounds: CGRect(x: 0, y: 0, width: 5760, height: 1080),
+        contentSize: CGSize(width: 3840, height: 2160),
+        settings: LayoutSettings(contentMode: .fill, zoom: 1, horizontalOffset: 0, verticalOffset: 0)
     )
 
-    #expect(resolution.sourceURL == realURL)
-    #expect(resolution.quality == .originalAsset)
+    #expect(abs(delta.horizontal - (576.0 / 2592.0)) < 0.0001)
+    #expect(abs(delta.vertical - 0.1) < 0.0001)
 }
 
 @Test
-func wrapperResolutionFallsBackToPreviewAsset() throws {
-    let root = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let previewURL = root.appendingPathComponent("preview.heic")
+func clampedOffsetsStayWithinPanBounds() {
+    let clamped = DisplayLayoutEngine.clampedOffsets(horizontal: 1.4, vertical: -1.2)
 
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    FileManager.default.createFile(atPath: previewURL.path, contents: Data())
+    #expect(clamped.horizontal == 1)
+    #expect(clamped.vertical == -1)
+}
 
-    defer {
-        try? FileManager.default.removeItem(at: root)
-    }
+@Test
+func videoWallpaperResetTriggersWhenDisplayIDsChangeButCountMatches() {
+    let currentDisplayIDs: [CGDirectDisplayID] = [1, 2, 3]
+    let displays = [
+        DisplayInfo(id: 1, name: "One", frame: .zero, pixelSize: .zero, scaleX: 1, scaleY: 1),
+        DisplayInfo(id: 4, name: "Four", frame: .zero, pixelSize: .zero, scaleX: 1, scaleY: 1),
+        DisplayInfo(id: 5, name: "Five", frame: .zero, pixelSize: .zero, scaleX: 1, scaleY: 1),
+    ]
 
-    let resolution = SystemWallpaperLibrary.resolveImportTarget(
-        wrapperName: "Missing Wallpaper",
-        mobileAssetID: nil,
-        rootDirectory: root,
-        previewURL: previewURL
-    )
+    #expect(VideoWallpaperController.needsWindowReset(currentWindowDisplayIDs: currentDisplayIDs, displays: displays))
+}
 
-    #expect(resolution.sourceURL == previewURL)
-    #expect(resolution.quality == .previewFallback)
+@Test
+func videoWallpaperResetSkipsWhenDisplayIDsAreUnchanged() {
+    let currentDisplayIDs: [CGDirectDisplayID] = [7, 8]
+    let displays = [
+        DisplayInfo(id: 8, name: "Eight", frame: .zero, pixelSize: .zero, scaleX: 1, scaleY: 1),
+        DisplayInfo(id: 7, name: "Seven", frame: .zero, pixelSize: .zero, scaleX: 1, scaleY: 1),
+    ]
+
+    #expect(!VideoWallpaperController.needsWindowReset(currentWindowDisplayIDs: currentDisplayIDs, displays: displays))
 }

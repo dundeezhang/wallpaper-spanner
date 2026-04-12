@@ -16,10 +16,13 @@ final class VideoWallpaperController {
         url: URL,
         contentSize: CGSize,
         displays: [DisplayInfo],
-        screensByID: [CGDirectDisplayID: NSScreen],
         settings: LayoutSettings
     ) {
         stop()
+
+        guard !displays.isEmpty else {
+            return
+        }
 
         let item = AVPlayerItem(url: url)
         let queuePlayer = AVQueuePlayer()
@@ -31,13 +34,8 @@ final class VideoWallpaperController {
             settings: settings
         )
 
-        let windows = displays.compactMap { display -> DesktopVideoWindow? in
-            guard let screen = screensByID[display.id] else {
-                return nil
-            }
-
-            return DesktopVideoWindow(
-                screen: screen,
+        let windows = displays.map { display in
+            DesktopVideoWindow(
                 display: display,
                 player: queuePlayer,
                 contentRect: contentRect
@@ -55,20 +53,21 @@ final class VideoWallpaperController {
     func reconfigure(
         contentSize: CGSize,
         displays: [DisplayInfo],
-        screensByID: [CGDirectDisplayID: NSScreen],
         settings: LayoutSettings
     ) {
         guard let player else {
             return
         }
 
-        if windows.count != displays.count {
+        if Self.needsWindowReset(
+            currentWindowDisplayIDs: windows.map(\.displayID),
+            displays: displays
+        ) {
             if let currentURL = player.currentItem?.asset as? AVURLAsset {
                 start(
                     url: currentURL.url,
                     contentSize: contentSize,
                     displays: displays,
-                    screensByID: screensByID,
                     settings: settings
                 )
             }
@@ -85,13 +84,12 @@ final class VideoWallpaperController {
 
         for window in windows {
             guard
-                let display = displaysByID[window.displayID],
-                let screen = screensByID[window.displayID]
+                let display = displaysByID[window.displayID]
             else {
                 continue
             }
 
-            window.update(screen: screen, display: display, player: player, contentRect: contentRect)
+            window.update(display: display, player: player, contentRect: contentRect)
         }
     }
 
@@ -106,6 +104,13 @@ final class VideoWallpaperController {
 
         windows.removeAll()
     }
+
+    nonisolated static func needsWindowReset(
+        currentWindowDisplayIDs: [CGDirectDisplayID],
+        displays: [DisplayInfo]
+    ) -> Bool {
+        Set(currentWindowDisplayIDs) != Set(displays.map(\.id))
+    }
 }
 
 @MainActor
@@ -114,7 +119,6 @@ private final class DesktopVideoWindow: NSWindow {
     private let sliceView = VideoSliceView(frame: .zero)
 
     init(
-        screen: NSScreen,
         display: DisplayInfo,
         player: AVPlayer,
         contentRect: CGRect
@@ -138,7 +142,7 @@ private final class DesktopVideoWindow: NSWindow {
         sliceView.autoresizingMask = [.width, .height]
         contentView = sliceView
 
-        update(screen: screen, display: display, player: player, contentRect: contentRect)
+        update(display: display, player: player, contentRect: contentRect)
         orderFront(nil)
     }
 
@@ -156,12 +160,7 @@ private final class DesktopVideoWindow: NSWindow {
         )
     }
 
-    func update(
-        screen: NSScreen,
-        display: DisplayInfo,
-        player: AVPlayer,
-        contentRect: CGRect
-    ) {
+    func update(display: DisplayInfo, player: AVPlayer, contentRect: CGRect) {
         setFrame(display.frame, display: true)
         setFrameOrigin(display.frame.origin)
         setContentSize(display.frame.size)

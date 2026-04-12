@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject private var appController: AppController
     @EnvironmentObject private var model: AppModel
-    @State private var showingSystemWallpaperBrowser = false
 
     var body: some View {
         HSplitView {
@@ -17,7 +17,11 @@ struct ContentView: View {
                 LayoutPreview(
                     displays: model.displays,
                     media: model.media,
-                    settings: model.settings
+                    settings: model.settings,
+                    onOffsetChange: { horizontalOffset, verticalOffset in
+                        model.horizontalOffset = horizontalOffset
+                        model.verticalOffset = verticalOffset
+                    }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -35,12 +39,6 @@ struct ContentView: View {
                                     model.chooseMedia()
                                 }
                                 .buttonStyle(.borderedProminent)
-
-                                Button("Browse macOS Wallpapers") {
-                                    model.loadSystemWallpapersIfNeeded()
-                                    showingSystemWallpaperBrowser = true
-                                }
-                                .buttonStyle(.bordered)
                             }
 
                             if let media = model.media {
@@ -130,15 +128,12 @@ struct ContentView: View {
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .sheet(isPresented: $showingSystemWallpaperBrowser) {
-            SystemWallpaperBrowserView(
-                items: model.systemWallpaperItems,
-                isLoading: model.isLoadingSystemWallpapers,
-                errorMessage: model.systemWallpaperErrorMessage,
-                refresh: model.refreshSystemWallpapers,
-                choose: model.importSystemWallpaper
-            )
-        }
+        .background(
+            WindowAccessor { window in
+                appController.registerMainWindow(window)
+            }
+            .frame(width: 0, height: 0)
+        )
     }
 
     private func controlCard<Content: View>(
