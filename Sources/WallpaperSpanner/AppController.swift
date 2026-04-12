@@ -3,6 +3,12 @@ import SwiftUI
 
 @MainActor
 final class AppController: NSObject, ObservableObject, NSApplicationDelegate, NSWindowDelegate {
+    private enum WindowChrome {
+        static let trafficLightLeadingInset: CGFloat = 20
+        static let trafficLightTopInset: CGFloat = 16
+        static let trafficLightSpacing: CGFloat = 6
+    }
+
     private weak var mainWindow: NSWindow?
     private var statusItem: NSStatusItem?
 
@@ -62,7 +68,23 @@ final class AppController: NSObject, ObservableObject, NSApplicationDelegate, NS
 
         mainWindow = window
         window.isReleasedWhenClosed = false
+        window.styleMask.insert(.fullSizeContentView)
+        window.isOpaque = false
+        window.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96)
         window.delegate = self
+        window.toolbarStyle = .automatic
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = false
+        window.toolbar?.showsBaselineSeparator = false
+        positionTrafficLights(in: window)
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window else {
+                return
+            }
+
+            self.positionTrafficLights(in: window)
+        }
         updateActivationPolicy(showInDock: true)
     }
 
@@ -89,7 +111,16 @@ final class AppController: NSObject, ObservableObject, NSApplicationDelegate, NS
 
         mainWindow.makeKeyAndOrderFront(nil)
         mainWindow.orderFrontRegardless()
+        positionTrafficLights(in: mainWindow)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === mainWindow else {
+            return
+        }
+
+        positionTrafficLights(in: window)
     }
 
     @objc private func showMainWindowFromStatusItem() {
@@ -108,5 +139,28 @@ final class AppController: NSObject, ObservableObject, NSApplicationDelegate, NS
         }
 
         NSApp.setActivationPolicy(desiredPolicy)
+    }
+
+    private func positionTrafficLights(in window: NSWindow) {
+        guard
+            let closeButton = window.standardWindowButton(.closeButton),
+            let minimizeButton = window.standardWindowButton(.miniaturizeButton),
+            let zoomButton = window.standardWindowButton(.zoomButton),
+            let containerView = closeButton.superview
+        else {
+            return
+        }
+
+        containerView.layoutSubtreeIfNeeded()
+
+        let buttons = [closeButton, minimizeButton, zoomButton]
+        let buttonSize = closeButton.frame.size
+        let originY = containerView.bounds.height - buttonSize.height - WindowChrome.trafficLightTopInset
+
+        var originX = WindowChrome.trafficLightLeadingInset
+        for button in buttons {
+            button.setFrameOrigin(NSPoint(x: originX, y: originY))
+            originX += buttonSize.width + WindowChrome.trafficLightSpacing
+        }
     }
 }

@@ -98,6 +98,66 @@ func clampedOffsetsStayWithinPanBounds() {
 }
 
 @Test
+func fitAllPresetResetsToCenteredFitLayout() {
+    let settings = LayoutSettings(
+        contentMode: .fill,
+        zoom: 2.2,
+        horizontalOffset: 0.4,
+        verticalOffset: -0.3
+    )
+    let preset = settings.applying(.fitAll)
+
+    #expect(preset.contentMode == .fit)
+    #expect(preset.zoom == 1)
+    #expect(preset.horizontalOffset == 0)
+    #expect(preset.verticalOffset == 0)
+}
+
+@Test
+func nudgedLayoutSettingsClampZoomAndPanRanges() {
+    let settings = LayoutSettings(
+        contentMode: .fill,
+        zoom: 2.95,
+        horizontalOffset: 0.98,
+        verticalOffset: -0.99
+    )
+    let nudged = settings.nudged(horizontal: 0.2, vertical: -0.2, zoom: 0.2)
+
+    #expect(nudged.zoom == 3)
+    #expect(nudged.horizontalOffset == 1)
+    #expect(nudged.verticalOffset == -1)
+}
+
+@Test
+func magnifiedLayoutSettingsClampZoomRange() {
+    let settings = LayoutSettings(
+        contentMode: .fill,
+        zoom: 2.4,
+        horizontalOffset: 0.2,
+        verticalOffset: -0.1
+    )
+
+    let enlarged = settings.magnified(by: 1.5)
+    let reduced = settings.magnified(by: 0.2)
+
+    #expect(enlarged.zoom == 3)
+    #expect(enlarged.horizontalOffset == settings.horizontalOffset)
+    #expect(enlarged.verticalOffset == settings.verticalOffset)
+    #expect(reduced.zoom == 1)
+}
+
+@Test
+func resizeHandleScaleTracksDistanceFromCenter() {
+    let scale = DisplayLayoutEngine.scaleForResizeHandle(
+        from: CGPoint(x: 100, y: 100),
+        translation: CGSize(width: 20, height: 20),
+        around: CGPoint(x: 50, y: 50)
+    )
+
+    #expect(abs(scale - 1.4) < 0.02)
+}
+
+@Test
 func videoWallpaperResetTriggersWhenDisplayIDsChangeButCountMatches() {
     let currentDisplayIDs: [CGDirectDisplayID] = [1, 2, 3]
     let displays = [

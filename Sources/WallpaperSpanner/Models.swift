@@ -37,11 +37,98 @@ enum ContentMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct LayoutSettings: Sendable {
+enum FramingPreset: String, CaseIterable, Identifiable, Sendable {
+    case center = "Center"
+    case leftBias = "Left Bias"
+    case rightBias = "Right Bias"
+    case fitAll = "Fit All"
+    case fillAll = "Fill All"
+
+    var id: String {
+        rawValue
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .center:
+            "Center"
+        case .leftBias:
+            "Left"
+        case .rightBias:
+            "Right"
+        case .fitAll:
+            "Fit All"
+        case .fillAll:
+            "Fill All"
+        }
+    }
+}
+
+struct LayoutSettings: Sendable, Equatable {
     var contentMode: ContentMode = .fill
     var zoom: Double = 1.0
     var horizontalOffset: Double = 0.0
     var verticalOffset: Double = 0.0
+
+    static let zoomRange: ClosedRange<Double> = 1.0 ... 3.0
+    static let panRange: ClosedRange<Double> = -1.0 ... 1.0
+
+    func applying(_ preset: FramingPreset) -> LayoutSettings {
+        var next = self
+
+        switch preset {
+        case .center:
+            next.horizontalOffset = 0
+            next.verticalOffset = 0
+        case .leftBias:
+            next.contentMode = .fill
+            next.horizontalOffset = -0.35
+            next.verticalOffset = 0
+        case .rightBias:
+            next.contentMode = .fill
+            next.horizontalOffset = 0.35
+            next.verticalOffset = 0
+        case .fitAll:
+            next.contentMode = .fit
+            next.zoom = 1.0
+            next.horizontalOffset = 0
+            next.verticalOffset = 0
+        case .fillAll:
+            next.contentMode = .fill
+            next.zoom = 1.0
+            next.horizontalOffset = 0
+            next.verticalOffset = 0
+        }
+
+        return next.clamped()
+    }
+
+    func nudged(horizontal: Double = 0, vertical: Double = 0, zoom: Double = 0) -> LayoutSettings {
+        var next = self
+        next.horizontalOffset += horizontal
+        next.verticalOffset += vertical
+        next.zoom += zoom
+        return next.clamped()
+    }
+
+    func magnified(by scale: Double) -> LayoutSettings {
+        guard scale.isFinite, scale > 0 else {
+            return clamped()
+        }
+
+        var next = self
+        next.zoom *= scale
+        return next.clamped()
+    }
+
+    func clamped() -> LayoutSettings {
+        LayoutSettings(
+            contentMode: contentMode,
+            zoom: min(max(zoom, Self.zoomRange.lowerBound), Self.zoomRange.upperBound),
+            horizontalOffset: min(max(horizontalOffset, Self.panRange.lowerBound), Self.panRange.upperBound),
+            verticalOffset: min(max(verticalOffset, Self.panRange.lowerBound), Self.panRange.upperBound)
+        )
+    }
 }
 
 struct MediaAsset {
@@ -268,6 +355,31 @@ struct DisplayLayoutEngine {
             horizontal: min(max(horizontal, -1), 1),
             vertical: min(max(vertical, -1), 1)
         )
+    }
+
+    static func scaleForResizeHandle(
+        from originalHandlePoint: CGPoint,
+        translation: CGSize,
+        around centerPoint: CGPoint
+    ) -> Double {
+        let originalDistance = hypot(
+            originalHandlePoint.x - centerPoint.x,
+            originalHandlePoint.y - centerPoint.y
+        )
+        guard originalDistance > 0 else {
+            return 1
+        }
+
+        let translatedPoint = CGPoint(
+            x: originalHandlePoint.x + translation.width,
+            y: originalHandlePoint.y + translation.height
+        )
+        let translatedDistance = hypot(
+            translatedPoint.x - centerPoint.x,
+            translatedPoint.y - centerPoint.y
+        )
+
+        return max(Double(translatedDistance / originalDistance), 0.01)
     }
 
     private static func contentMetrics(
